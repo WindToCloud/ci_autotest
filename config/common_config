@@ -110,5 +110,24 @@ CONFIG_LIB_TMP=$(cd "`dirname $0`" ; pwd)
 echo ${CONFIG_LIB_TMP}
 python ${CONFIG_LIB_TMP}/../ci_interface/if/AddPath.py
 
+#MAC of DHCP server
+DHCP_SERVER_MAC_ADDR="e8:4d:d0:c0:d4:66"
+CLIENT_SERVER_MAC_ADDR="c0:a8:02:f0:00:04"
+BOARD_159_MAC_ADDR="ee:44:ed:2a:9a:e2"
+
+#User info of DHCP
+DHCP_SERVER_USER="luojiaxing"
+DHCP_SERVER_PASS="ljx12\#\$" 
+
+COMMON_LOCAL_IP="0.0.0.0"
+COMMON_CLIENT_IP="0.0.0.0"
+
+#Default DHCP server ip. 
+#prepare for DHCP ip no found
+COMMON_DEFAULT_DHCP_IP="192.168.3.100"
+
+#The repo address of kernel
+KERNEL_GITADDR="https://github.com/hisilicon/kernel-dev.git"
+BRANCH_NAME="release-plinth-4.16.1"
 ####################################################################################
 

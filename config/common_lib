@@ -1,4 +1,4 @@
-#!/bin/bash
+
 
 
 #############################################################################################################
@@ -88,6 +88,218 @@ function setTrustRelation
 
     return 0
 }
+
+####
+#add by luojiaxing
+####
+# Set trust relationship for two boards
+# IN : 
+#     $1 : Ip of target server
+      $2 : username to login  target server
+      $3 : password used for username before
+# OUT: N/A
+function setTrustRelationUsePara
+{
+    rm -f ~/.ssh/*
+    
+    tmpIP=$1
+    tmpUsername=$2
+    tmpPassword=$3 
+ 
+    expect -c '
+        set timeout -1
+        set back_ip '${tmpIP}'
+        set user_name '${tmpUsername}'
+       # set pass_word '${tmpPassword}'
+        spawn ssh-keygen -t rsa
+        expect {
+        "*save the key*id_rsa*" { send "\r"; exp_continue }
+        "*verwrite*y/n*" { send "y\r"; exp_continue }
+        "*passphrase*passphrase*" { send "\r"; exp_continue }
+        "*same passphrase*" { send "\r" }
+        }
+
+        spawn scp -r /root/.ssh/id_rsa.pub $user_name@$back_ip:/root/.ssh/authorized_keys
+        expect "Are you sure you want to continue connecting (yes/no)?"
+        send "yes\r"
+        sleep 10
+        expect -re ".*password:"
+        send "Huawei12\#\$\r"
+
+        expect eof
+        exit 0
+    '
+
+    return 0
+}
+
+
+
+## Get Local IP
+# IN : N/A
+# OUT: N/A
+function initLocalIP()
+{
+    echo "Begin to get local ip"
+    COMMON_LOCAL_IP=`ifconfig eth0 | grep 'inet addr:' | awk '{print $2}' | awk -F':' '{print $2}'`
+    echo "The local ip of eth0 is "${COMMON_LOCAL_IP}
+}
+
+# Get client server ip
+# IN :
+      $1 : MAC address of DHCP server 
+      $2 : MAC address of client server
+	  $3 : username of DHCP server
+	  $4 : password of DHCP server
+# OUT: N/A
+function getIPofClientServer
+{
+    tmpDHCPMacAddr=${1}
+    tmpClientMacAddr=${2}
+    tmpUserName=${3}
+	tmpPassWord=${4}
+ 
+    echo ${tmpDHCPMacAddr} ${tmpClientMacAddr} ${tmpUserName} ${tmpPassWord}
+	
+	#First we need to get the ip of DHCP server 
+	tmpDHCPIp=`arp | grep ${tmpDHCPMacAddr} | awk '{print $1}'`
+	echo "Get DHCP server IP :"${tmpDHCPIp} 
+	
+    #then,we get client ip from DHCP server using ssh service
+    expect -c '
+        set timeout -1
+        set back_ip '${tmpDHCPIp}'
+        set user_name '${tmpUserName}'
+        set pass_word '${tmpPassWord}'
+		
+        #show client ip info in arp list in DHCP server using ssh service 
+        spawn ssh $user_name@$back_ip  "arp | grep '${tmpClientMacAddr}'"
+		
+        sleep 10
+        set timeout 120
+        expect "Are you sure you want to continue connecting (yes/no)?"
+        send "yes\r"
+        expect -re ".*password:"
+        #set timeout 120
+        send "$pass_word\r"
+        expect eof
+        exit 0
+    ' | tee res.log
+
+        tmpTargetIpList=`cat res.log | grep 'ether' | awk '{print $1}'`
+        
+        if [ x"$tmpTargetIpList" = x"" ]
+        then
+            expect -c '
+        	set timeout -1
+        	set back_ip '${tmpDHCPIp}'
+        	set user_name '${tmpUserName}'
+       	 	set pass_word '${tmpPassWord}'
+		
+        	#show client ip info in arp list in DHCP server using ssh service 
+        	spawn ssh $user_name@$back_ip  "arp | grep '${tmpClientMacAddr}'"
+		
+        	sleep 10
+        	expect "Are you sure you want to continue connecting (yes/no)?"
+        	set timeout 60
+        	send "yes\r"
+        	expect -re ".*password:"
+        	set timeout 60
+        	send "$pass_word\r"
+        	expect eof
+        	exit 0
+    		' | tee res.log
+
+        	tmpTargetIpList=`cat res.log | grep 'ether' | awk '{print $1}'`
+        fi
+
+        #finish we need to get the using ip form ip list get before using ping
+        for ip in $tmpTargetIpList
+        do
+		ping ${ip} -c 6 > /dev/null
+		if [ $? != 0 ]
+		then
+			echo "The using client ip is not "$ip
+		else
+			echo "The using client ip is "$ip" Get IP success!"
+			COMMON_CLIENT_IP=$ip
+			break
+		fi
+        done
+
+        echo "the return value is "${COMMON_CLIENT_IP}
+        rm res.log
+}
+
+## Modify Boot Order to self disk reboot
+# IN : N/A
+# OUT: N/A
+function modifyBootOrder()
+{
+
+  #***First, we should change the boot order to make TEST_REBOOT lie on first order***
+
+  #get the first order id of boot order list
+  First_ID=`efibootmgr -v | grep "BootOrder" | awk '{print $2}' | awk -F',' '{print $1}'`
+
+  #get the id of TEST_REBOOT
+  tmp=`efibootmgr -v | grep "Self_Disk_Reboot" | awk '{print $1}'`
+  tmp=${tmp:4:4}
+  echo $tmp
+
+  #insert the order of TEST_REBOOT into first order
+  efibootmgr -o $tmp,$First_ID
+
+ # efibootmgr
+  
+}
+
+function recoverBootOrder()
+{
+ #***First, we should change the boot order to make TEST_REBOOT lie on first order***
+
+  #get the first order id of boot order list
+  First_ID=`efibootmgr -v | grep "BootOrder" | awk '{print $2}' | awk -F',' '{print $1}'`
+
+  #get the id of TEST_REBOOT
+  tmp=`efibootmgr -v | grep "EFI Network 2" | awk '{print $1}'`
+  tmp=${tmp:4:4}
+  echo $tmp
+
+  #insert the order of TEST_REBOOT into first order
+  efibootmgr -o $tmp,$First_ID
+
+  #efibootmgr
+
+}
+
+function remoteLogin()
+{
+   #First,reboot
+   #ssh root@192.168.3.197 "reboot"
+   expect -c '
+        	set timeout -1
+        	spawn ssh root@192.168.3.197  "reboot"
+		
+        	sleep 120
+        	expect "login:"
+        	set timeout 120
+        	send "root\r"
+        	expect -re "Password"
+        	set timeout 60
+        	send "root\r"
+        	expect eof
+        	exit 0
+    		' 
+   ssh root@192.168.3.197 "pwd"
+   echo "Success login in the system"
+}
+
+####
+#End of luojiaxing edit
+####
+
+
 
 ####################################################################################
 #add by hezhongyan
